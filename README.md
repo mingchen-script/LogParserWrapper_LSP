@@ -1,5 +1,5 @@
 # LogParserWrapper_LSP
-Convert LSP logs to Excel chart for more insight toward LsarLookup* workload. 
+Convert LSP logs to Excel more insight toward LsarLookup* workload. 
 # Readme..
 	# This script will generate LsarLookup*'s IP/SiD/User/Process summary Excel sheet from LSP log(s) using LogParser and Excel via COM objects.
 	#		1. To enable LSP logging, save below to .REG and run, logging starts as soon as REG set. 

@@ -5,40 +5,30 @@
 		#			[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Lsa] 
 		#			"LspDbgInfoLevel"=dword:40000800 
 		#			"LspDbgTraceOptions"=dword:00000001 
-	#		2. Output in %windir%\debug\lsp.log & lsp.bak
+	#		2. Resulting logs in %windir%\debug\lsp.log & lsp.bak
 	#		3. To stop, delete REG in (1) and files in (2)
 	#		4. More info http://technet.microsoft.com/en-us/library/ff428139(v=WS.10).aspx#BKMK_LsaLookupNames 
 	#
-	# LogParserWrapper_LSP.ps1 v0.7 11/14 (auto convert UniCode > Ascii)
+	# LogParserWrapper_LSP.ps1 v0.8 12/4 (skip lsp logs modifications by using *.bak and LogParser's iCodePage)
 	#		Steps: 
 	#   	1. Install LogParser 2.2 from https://www.microsoft.com/en-us/download/details.aspx?id=24659
 	#     	Note: More about LogParser2.2 https://docs.microsoft.com/en-us/previous-versions/windows/it-pro/windows-xp/bb878032(v=technet.10)?redirectedfrom=MSDN
 	#   	2. Copy LSP.log & LSP.bak from target's %windir%\debug directory to same directory as this script.
-	#     		Note1: Script will rename LSP.bak to LSP_bak.log.
-	#					Note2: Script will process all *.log(s) in script directory when run.
+	#					Note: Script will process all *.log & *.bak in script directory when run.
 	#   	3. Run script
 	# 
 #------Main---------------------------------
 $ErrorActionPreference = "SilentlyContinue"
 	$ScriptPath = Split-Path ((Get-Variable MyInvocation -Scope 0).Value).MyCommand.Path
-	$null = Get-ChildItem -Path $ScriptPath -Filter '*.bak' | Rename-Item -NewName {$_.name -replace '\.bak$', "_bak.log"} -ErrorAction Stop
-	$TotalSteps = ((Get-ChildItem -Path $ScriptPath -Filter '*.log').count)+4
-  $Step=1
-	(Get-ChildItem -Path $ScriptPath -Filter '*.log').foreach({
-		Write-Progress -Activity "Convert $_ from UniCode to Ascii" -PercentComplete (($Step++/$TotalSteps)*100)
-		If ((Get-Content -Encoding byte -ReadCount 2 -TotalCount 2 -Path $_)[1] -eq 0){ 
-			Get-Content $_ -Encoding Unicode |  Set-Content "$ScriptPath\Tmp-$_" -Encoding ascii 
-			Remove-Item $_ 
-			Rename-Item "$ScriptPath\Tmp-$_" "$ScriptPath\$_" 
-		}
-	})
-	$InFiles = $ScriptPath+'\*.log'
+	$TotalSteps = 4
+	$Step=1
+	$InFiles = $ScriptPath+'\*.log, '+$ScriptPath+'\*.bak'
 	$InputFormat = New-Object -ComObject MSUtil.LogQuery.TextLineInputFormat
+		$InputFormat.iCodePage=-1
 	$TimeStamp = "{0:yyyy-MM-dd_hh-mm-ss_tt}" -f (Get-Date)
 	$OutputFormat = New-Object -ComObject MSUtil.LogQuery.CSVOutputFormat
 	$OutTitle = 'LSP-IP_Sid_Name_App'
 	$OutFile = "$ScriptPath\$TimeStamp-$OutTitle.csv"
-		Write-Progress -Activity "Generating CSV"  -PercentComplete (($Step++/$TotalSteps)*100)
 		$Query = @"
 			SELECT Top 1000
 				EXTRACT_SUFFIX(SUBSTR(TEXT, INDEX_OF (TEXT, 'Network Address = '), STRLEN(TEXT)), 0, '= ') as Remote_IP,
@@ -55,7 +45,7 @@ $ErrorActionPreference = "SilentlyContinue"
 			Order By 
 				Total, Remote_IP, LookupSID, LookupName, Process DESC
 "@
-		Write-Progress -Activity "Generating $OutTitle report" -PercentComplete (($Step++/$TotalSteps)*100)
+		Write-Progress -Activity "Generating $OutTitle CSV using LogParser" -PercentComplete (($Step++/$TotalSteps)*100)
 		$LPQuery = New-Object -ComObject MSUtil.LogQuery
 		$null = $LPQuery.ExecuteBatch($Query,$InputFormat,$OutputFormat)
 		$null = [System.Runtime.Interopservices.Marshal]::ReleaseComObject($LPQuery) 
@@ -63,10 +53,10 @@ $ErrorActionPreference = "SilentlyContinue"
 		$null = [System.Runtime.Interopservices.Marshal]::ReleaseComObject($OutputFormat) 
 #---------Find logs's time range Info----------
 	$OldestTimeStamp = $NewestTimeStamp = $LogsInfo = $null
-	(Get-ChildItem -Path $ScriptPath -Filter '*.log').foreach({
-    $FirstLine = (Get-Content $_ -Head 1) -split ' '
-      if ($FirstLine[1] -eq $null) { $FirstLine = (Get-Content $_ -Head 2)[1] -split ' ' } # incase first line is blank
-		$LastLine  = (Get-Content $_ -Tail 1) -split ' '
+	(Get-ChildItem -Path $ScriptPath\* -include ('*.log', '*.bak') ).foreach({
+    $FirstLine = (Get-Content $_ -Head 1 -Encoding Unicode) -split ' '
+      # if ($FirstLine[1] -eq $null) { $FirstLine = (Get-Content $_ -Head 2 -Encoding Unicode)[1] -split ' ' } # first line is blank
+		$LastLine  = (Get-Content $_ -Tail 1 -Encoding Unicode) -split ' '
 		$FirstTimeStamp = [datetime]::ParseExact($FirstLine[0]+' '+$FirstLine[1],"[MM/dd HH:mm:ss]",$Null)
 		$LastTimeStamp = [datetime]::ParseExact($LastLine[0]+' '+$LastLine[1],"[MM/dd HH:mm:ss]",$Null)
 			if ($OldestTimeStamp -eq $null) { $OldestTimeStamp = $NewestTimeStamp = $FirstTimeStamp }

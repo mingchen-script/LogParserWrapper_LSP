@@ -9,26 +9,36 @@
 	#		3. To stop, delete REG in (1) and files in (2)
 	#		4. More info http://technet.microsoft.com/en-us/library/ff428139(v=WS.10).aspx#BKMK_LsaLookupNames 
 	#
-	# LogParserWrapper_LSP.ps1 v0.6 11/14 (added LogInfo)
+	# LogParserWrapper_LSP.ps1 v0.7 11/14 (auto convert UniCode > Ascii)
 	#		Steps: 
 	#   	1. Install LogParser 2.2 from https://www.microsoft.com/en-us/download/details.aspx?id=24659
 	#     	Note: More about LogParser2.2 https://docs.microsoft.com/en-us/previous-versions/windows/it-pro/windows-xp/bb878032(v=technet.10)?redirectedfrom=MSDN
 	#   	2. Copy LSP.log & LSP.bak from target's %windir%\debug directory to same directory as this script.
 	#     		Note1: Script will rename LSP.bak to LSP_bak.log.
 	#					Note2: Script will process all *.log(s) in script directory when run.
-	#			3. IMPORTANT: Open each .log and .bak file with notepad, insert a blank line, save the change to convert log format LogParser can read.
-	#				**In NotePad++, select 'Encoding' > 'Convert to ANSI', file size should reduce by half. (Consider creating a Micros if you review LSP logs often.)
-	#   	4. Run script
+	#   	3. Run script
 	# 
 #------Main---------------------------------
+$ErrorActionPreference = "SilentlyContinue"
 	$ScriptPath = Split-Path ((Get-Variable MyInvocation -Scope 0).Value).MyCommand.Path
-	Get-ChildItem -Path $ScriptDirectory -Filter '*.bak' | Rename-Item -NewName {$_.name -replace '\.bak$', "_bak.log"} -ErrorAction Stop | Out-Null
-		$InFiles = $ScriptPath+'\*.log'
-		$InputFormat = New-Object -ComObject MSUtil.LogQuery.TextLineInputFormat
-		$TimeStamp = "{0:yyyy-MM-dd_hh-mm-ss_tt}" -f (Get-Date)
-		$OutputFormat = New-Object -ComObject MSUtil.LogQuery.CSVOutputFormat
-		$OutTitle = 'LSP-IP_Sid_Name_App'
-		$OutFile = "$ScriptPath\$TimeStamp-$OutTitle.csv"
+	$null = Get-ChildItem -Path $ScriptPath -Filter '*.bak' | Rename-Item -NewName {$_.name -replace '\.bak$', "_bak.log"} -ErrorAction Stop
+	$TotalSteps = ((Get-ChildItem -Path $ScriptPath -Filter '*.log').count)+4
+  $Step=1
+	(Get-ChildItem -Path $ScriptPath -Filter '*.log').foreach({
+		Write-Progress -Activity "Convert $_ from UniCode to Ascii" -PercentComplete (($Step++/$TotalSteps)*100)
+		If ((Get-Content -Encoding byte -ReadCount 2 -TotalCount 2 -Path $_)[1] -eq 0){ 
+			Get-Content $_ -Encoding Unicode |  Set-Content "$ScriptPath\Tmp-$_" -Encoding ascii 
+			Remove-Item $_ 
+			Rename-Item "$ScriptPath\Tmp-$_" "$ScriptPath\$_" 
+		}
+	})
+	$InFiles = $ScriptPath+'\*.log'
+	$InputFormat = New-Object -ComObject MSUtil.LogQuery.TextLineInputFormat
+	$TimeStamp = "{0:yyyy-MM-dd_hh-mm-ss_tt}" -f (Get-Date)
+	$OutputFormat = New-Object -ComObject MSUtil.LogQuery.CSVOutputFormat
+	$OutTitle = 'LSP-IP_Sid_Name_App'
+	$OutFile = "$ScriptPath\$TimeStamp-$OutTitle.csv"
+		Write-Progress -Activity "Generating CSV"  -PercentComplete (($Step++/$TotalSteps)*100)
 		$Query = @"
 			SELECT Top 1000
 				EXTRACT_SUFFIX(SUBSTR(TEXT, INDEX_OF (TEXT, 'Network Address = '), STRLEN(TEXT)), 0, '= ') as Remote_IP,
@@ -45,9 +55,8 @@
 			Order By 
 				Total, Remote_IP, LookupSID, LookupName, Process DESC
 "@
-		Write-Progress -Activity "Generating $OutTitle report" -PercentComplete (50)
+		Write-Progress -Activity "Generating $OutTitle report" -PercentComplete (($Step++/$TotalSteps)*100)
 		$LPQuery = New-Object -ComObject MSUtil.LogQuery
-
 		$null = $LPQuery.ExecuteBatch($Query,$InputFormat,$OutputFormat)
 		$null = [System.Runtime.Interopservices.Marshal]::ReleaseComObject($LPQuery) 
 		$null = [System.Runtime.Interopservices.Marshal]::ReleaseComObject($InputFormat) 
@@ -70,11 +79,10 @@
 		$LogRangeText += ("Ref: LsaLookupCacheMaxSize`n  https://docs.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2008-R2-and-2008/ff428139(v=ws.10)`n`n") 
 		$LogRangeText += ("Ref: Well-Known SID`n  https://docs.microsoft.com/en-us/troubleshoot/windows-server/identity/security-identifiers-in-windows`n`n") 
 		$LogRangeText += ("#-------------------------------`n  [Overall EventRange]: "+$OldestTimeStamp+' ~ '+$NewestTimeStamp+"`n  [Overall TimeRange]: "+$LogTimeRange.Days+' Days '+$LogTimeRange.Hours+' Hours '+$LogTimeRange.Minutes+' Minutes '+$LogTimeRange.Seconds+" Seconds `n`n") + $LogsInfo 
-
 	#---------Excel--------------------------------
 If (Test-Path $OutFile) { # Check if LP generated CSV.
 	$Excel = New-Object -ComObject excel.application  # https://docs.microsoft.com/en-us/office/vba/api/overview/excel/object-model
-	Write-Progress -Activity "Generating Excel worksheets" -PercentComplete (95)
+	Write-Progress -Activity "Generating Excel worksheets" -PercentComplete (($Step++/$TotalSteps)*100)
 		# $Excel.visible = $true
 		$Excel.Workbooks.OpenText("$OutFile")
 		$Sheet = $Excel.Workbooks[1].Worksheets[1]

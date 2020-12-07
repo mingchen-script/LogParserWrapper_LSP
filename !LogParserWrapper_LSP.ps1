@@ -9,7 +9,7 @@
 	#		3. To stop, delete REG in (1) and files in (2)
 	#		4. More info http://technet.microsoft.com/en-us/library/ff428139(v=WS.10).aspx#BKMK_LsaLookupNames 
 	#
-	# LogParserWrapper_LSP.ps1 v0.8 12/4 (skip lsp logs modifications by using *.bak and LogParser's iCodePage)
+	# LogParserWrapper_LSP.ps1 v0.8 12/7 (skip lsp logs modifications by using *.bak and LogParser's iCodePage)
 	#		Steps: 
 	#   	1. Install LogParser 2.2 from https://www.microsoft.com/en-us/download/details.aspx?id=24659
 	#     	Note: More about LogParser2.2 https://docs.microsoft.com/en-us/previous-versions/windows/it-pro/windows-xp/bb878032(v=technet.10)?redirectedfrom=MSDN

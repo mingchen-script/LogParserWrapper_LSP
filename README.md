@@ -5,7 +5,7 @@ Convert LSP logs to Excel for more insight toward LsarLookup* workload.
 	#		1. To enable LSP logging, save below to .REG and run, logging starts as soon as REG set. 
 		#			Windows Registry Editor Version 5.00 
 		#			[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Lsa] 
-		#			"LspDbgInfoLevel"=dword:40000800 
+		#			"LspDbgInfoLevel"=dword:800 
 		#			"LspDbgTraceOptions"=dword:00000001 
 	#		2. Resulting logs in %windir%\debug\lsp.log & lsp.bak
 	#		3. To stop, delete REG in (1) and files in (2)

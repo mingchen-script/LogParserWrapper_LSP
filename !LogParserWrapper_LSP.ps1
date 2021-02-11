@@ -1,4 +1,4 @@
-# Readme..
+# Readme.. 
 	# This script will generate LsarLookup*'s IP/SiD/User/Process summary Excel sheet from LSP log(s) using LogParser and Excel via COM objects.
 	#		1. To enable LSP logging, save below to .REG and run, logging starts as soon as REG set. 
 		#			Windows Registry Editor Version 5.00 
@@ -9,7 +9,7 @@
 	#		3. To stop, delete REG in (1) and files in (2)
 	#		4. More info http://technet.microsoft.com/en-us/library/ff428139(v=WS.10).aspx#BKMK_LsaLookupNames 
 	#
-	# LogParserWrapper_LSP.ps1 v0.8 12/7 (skip lsp logs modifications by using *.bak and LogParser's iCodePage)
+	# LogParserWrapper_LSP.ps1 v1.0 2/11 ($g_Chart as option for script to list ALL SID & fixed TimeRange)
 	#		Steps: 
 	#   	1. Install LogParser 2.2 from https://www.microsoft.com/en-us/download/details.aspx?id=24659
 	#     	Note: More about LogParser2.2 https://docs.microsoft.com/en-us/previous-versions/windows/it-pro/windows-xp/bb878032(v=technet.10)?redirectedfrom=MSDN
@@ -17,8 +17,12 @@
 	#					Note: Script will process all *.log & *.bak in script directory when run.
 	#   	3. Run script
 	# 
+#------Script variables block, modify to fit your needs ---------------------------------------------------------------------
+$g_Chart = $false  # Include PieChart in report XLS.
+
 #------Main---------------------------------
 $ErrorActionPreference = "SilentlyContinue"
+
 	$ScriptPath = Split-Path ((Get-Variable MyInvocation -Scope 0).Value).MyCommand.Path
 	$TotalSteps = 4
 	$Step=1
@@ -30,7 +34,7 @@ $ErrorActionPreference = "SilentlyContinue"
 	$OutTitle = 'LSP-IP_Sid_Name_App'
 	$OutFile = "$ScriptPath\$TimeStamp-$OutTitle.csv"
 		$Query = @"
-			SELECT Top 1000
+			SELECT 
 				EXTRACT_SUFFIX(SUBSTR(TEXT, INDEX_OF (TEXT, 'Network Address = '), STRLEN(TEXT)), 0, '= ') as Remote_IP,
 				EXTRACT_SUFFIX(SUBSTR(TEXT, INDEX_OF (TEXT, 'Sids[ 0 ] = '), STRLEN(TEXT)), 0, '= ') as LookupSID,
 				EXTRACT_SUFFIX(SUBSTR(TEXT, INDEX_OF (TEXT, 'Names[ 0 ] = '), STRLEN(TEXT)), 0, '= ') as LookupName,
@@ -54,13 +58,19 @@ $ErrorActionPreference = "SilentlyContinue"
 #---------Find logs's time range Info----------
 	$OldestTimeStamp = $NewestTimeStamp = $LogsInfo = $null
 	(Get-ChildItem -Path $ScriptPath\* -include ('*.log', '*.bak') ).foreach({
-    $FirstLine = (Get-Content $_ -Head 1 -Encoding Unicode) -split ' '
-		$LastLine  = (Get-Content $_ -Tail 1 -Encoding Unicode) -split ' '
-		$FirstTimeStamp = [datetime]::ParseExact($FirstLine[0]+' '+$FirstLine[1],"[MM/dd HH:mm:ss]",$Null)
-		$LastTimeStamp = [datetime]::ParseExact($LastLine[0]+' '+$LastLine[1],"[MM/dd HH:mm:ss]",$Null)
-			If ($OldestTimeStamp -eq $null) { $OldestTimeStamp = $NewestTimeStamp = $FirstTimeStamp }
-			If ($OldestTimeStamp -gt $FirstTimeStamp) {$OldestTimeStamp = $FirstTimeStamp }
-			If ($NewestTimeStamp -lt $LastTimeStamp) {$NewestTimeStamp = $LastTimeStamp }
+		$FirstLine = ((Get-Content $_ -Head 1 -Encoding Unicode)).substring(0,16)
+			try { $FirstTimeStamp = [datetime]::ParseExact($FirstLine,"[MM/dd HH:mm:ss]",$Null)} catch {}
+			try { $FirstTimeStamp = [datetime]::ParseExact($FirstLine,"[MM/ d HH:mm:ss]",$Null)} catch {}
+			try { $FirstTimeStamp = [datetime]::ParseExact($FirstLine,"[ M/dd HH:mm:ss]",$Null)} catch {}
+			try { $FirstTimeStamp = [datetime]::ParseExact($FirstLine,"[ M/ d HH:mm:ss]",$Null)} catch {}
+		$LastLine  = ((Get-Content $_ -Tail 1 -Encoding Unicode)).substring(0,16)
+			try { $LastTimeStamp = [datetime]::ParseExact($LastLine,"[MM/dd HH:mm:ss]",$Null)} catch {}
+			try { $LastTimeStamp = [datetime]::ParseExact($LastLine,"[MM/ d HH:mm:ss]",$Null)} catch {}
+			try { $LastTimeStamp = [datetime]::ParseExact($LastLine,"[ M/dd HH:mm:ss]",$Null)} catch {}
+			try { $LastTimeStamp = [datetime]::ParseExact($LastLine,"[ M/ d HH:mm:ss]",$Null)} catch {}
+		If ($OldestTimeStamp -eq $null) { $OldestTimeStamp = $NewestTimeStamp = $FirstTimeStamp }
+		If ($OldestTimeStamp -gt $FirstTimeStamp) {$OldestTimeStamp = $FirstTimeStamp }
+		If ($NewestTimeStamp -lt $LastTimeStamp) {$NewestTimeStamp = $LastTimeStamp }
 		$LogsInfo = $LogsInfo + ($_.name+"`n   "+$FirstTimeStamp+' ~ '+$LastTimeStamp+"`t   Log range = "+($LastTimeStamp-$FirstTimeStamp).Totalseconds+" Seconds`n`n")
 	})
 		$LogTimeRange = ($NewestTimeStamp-$OldestTimeStamp)
@@ -85,13 +95,15 @@ If (Test-Path $OutFile) { # Check if LogParser generated CSV.
 			$null = $Sheet.Cells.Item(1,6).addcomment()
 			$null = $Sheet.Cells.Item(1,6).comment.text($LogRangeText)
 			$Sheet.Cells.Item(1,6).comment.shape.textframe.Autosize = $true
-		$Chart = $Sheet.shapes.addChart().chart # https://codewala.net/2016/09/20/how-to-create-excel-chart-using-powershell-part-1/, https://codewala.net/2016/09/23/how-to-create-excel-chart-using-powershell-part-2/, https://codewala.net/2016/09/27/how-to-create-excel-chart-using-powershell-part-3/
+		if ($true -eq $g_Chart) { 
+			$Chart = $Sheet.shapes.addChart().chart # https://codewala.net/2016/09/20/how-to-create-excel-chart-using-powershell-part-1/, https://codewala.net/2016/09/23/how-to-create-excel-chart-using-powershell-part-2/, https://codewala.net/2016/09/27/how-to-create-excel-chart-using-powershell-part-3/
 			$Chart.chartType = -4120 
 			$Chart.SizeWithWindow = $Chart.HasTitle=$true  
 			$Chart.ChartTitle.text = $OutTitle
 			$Chart.ChartArea.Top = $Sheet.Cells.Item(2,6).Top
 			$Chart.ChartArea.Left = $Sheet.Cells.Item(2,6).Left
 			$Chart.ChartArea.Width = $Chart.ChartArea.Height = 300
+		}
 		$Excel.Workbooks[1].SaveAs($ScriptPath+'\'+$TimeStamp+'-'+$OutTitle,51)
 		Remove-Item ($ScriptPath+'\'+$TimeStamp+'-'+$OutTitle+'.csv')
 	$Excel.visible = $true

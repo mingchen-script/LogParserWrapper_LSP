@@ -9,7 +9,7 @@
 	#		3. To stop, delete REG in (1) and files in (2)
 	#		4. More info http://technet.microsoft.com/en-us/library/ff428139(v=WS.10).aspx#BKMK_LsaLookupNames 
 	#
-	# LogParserWrapper_LSP.ps1 v1.1 2/11 ($g_Top1000 as option to list top 1000 entries with PieChart)
+	# LogParserWrapper_LSP.ps1 v1.2 2/12 ($g_Top1000 as option to list top 1000 entries with PieChart, switch " & ' for path containing space)
 	#		Steps: 
 	#   	1. Install LogParser 2.2 from https://www.microsoft.com/en-us/download/details.aspx?id=24659
 	#     	Note: More about LogParser2.2 https://docs.microsoft.com/en-us/previous-versions/windows/it-pro/windows-xp/bb878032(v=technet.10)?redirectedfrom=MSDN
@@ -26,13 +26,15 @@ $ErrorActionPreference = "SilentlyContinue"
 	$ScriptPath = Split-Path ((Get-Variable MyInvocation -Scope 0).Value).MyCommand.Path
 	$TotalSteps = 4
 	$Step=1
-	$InFiles = $ScriptPath+'\*.log, '+$ScriptPath+'\*.bak'
+	# $InFiles = $ScriptPath+'\*.log, '+$ScriptPath+'\*.bak'
+	$InFiles = """$ScriptPath\*.log"" ,""$ScriptPath\*.bak"""
+		$InFiles = $InFiles -replace '"', ''''
 	$InputFormat = New-Object -ComObject MSUtil.LogQuery.TextLineInputFormat
 		$InputFormat.iCodePage=-1
 	$TimeStamp = "{0:yyyy-MM-dd_hh-mm-ss_tt}" -f (Get-Date)
 	$OutputFormat = New-Object -ComObject MSUtil.LogQuery.CSVOutputFormat
 	$OutTitle = 'LSP-IP_Sid_Name_App'
-	$OutFile = "$ScriptPath\$TimeStamp-$OutTitle.csv"
+	$OutFile = "'$ScriptPath\$TimeStamp-$OutTitle.csv'"
 	if ($true -eq $g_Top1000) {	$Query = @"
 			SELECT Top 1000
 				EXTRACT_SUFFIX(SUBSTR(TEXT, INDEX_OF (TEXT, 'Network Address = '), STRLEN(TEXT)), 0, '= ') as Remote_IP,
@@ -67,6 +69,7 @@ $ErrorActionPreference = "SilentlyContinue"
 		Write-Progress -Activity "Generating $OutTitle CSV using LogParser" -PercentComplete (($Step++/$TotalSteps)*100)
 		$LPQuery = New-Object -ComObject MSUtil.LogQuery
 		$null = $LPQuery.ExecuteBatch($Query,$InputFormat,$OutputFormat)
+		Write-Host 
 		$null = [System.Runtime.Interopservices.Marshal]::ReleaseComObject($LPQuery) 
 		$null = [System.Runtime.Interopservices.Marshal]::ReleaseComObject($InputFormat) 
 		$null = [System.Runtime.Interopservices.Marshal]::ReleaseComObject($OutputFormat) 
@@ -100,11 +103,12 @@ $ErrorActionPreference = "SilentlyContinue"
 		$LogRangeText += ("Ref: Well-Known SID`n  https://docs.microsoft.com/en-us/troubleshoot/windows-server/identity/security-identifiers-in-windows`n`n") 
 		$LogRangeText += ("#-------------------------------`n  [Overall EventRange]: "+$OldestTimeStamp+' ~ '+$NewestTimeStamp+"`n  [Overall TimeRange]: "+$LogTimeRange.Days+' Days '+$LogTimeRange.Hours+' Hours '+$LogTimeRange.Minutes+' Minutes '+$LogTimeRange.Seconds+" Seconds `n`n") + $LogsInfo 
 #---------Excel--------------------------------
-If (Test-Path $OutFile) { # Check if LogParser generated CSV.
+$OutFile = "$ScriptPath\$TimeStamp-$OutTitle.csv"
+If (Test-Path "$OutFile") { # Check if LogParser generated CSV.
 	$Excel = New-Object -ComObject excel.application  # https://docs.microsoft.com/en-us/office/vba/api/overview/excel/object-model
 	Write-Progress -Activity "Generating Excel worksheets" -PercentComplete (($Step++/$TotalSteps)*100)
 		# $Excel.visible = $true
-		$Excel.Workbooks.OpenText("$OutFile")
+		$Excel.Workbooks.OpenText($OutFile)
 		$Sheet = $Excel.Workbooks[1].Worksheets[1]
 			$null = $Sheet.Range("A1").AutoFilter()
 			$Sheet.Application.ActiveWindow.SplitRow=1  

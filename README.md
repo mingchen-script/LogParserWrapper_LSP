@@ -9,7 +9,7 @@
 	#		3. To stop, delete REG in (1) and files in (2)
 	#		4. More info http://technet.microsoft.com/en-us/library/ff428139(v=WS.10).aspx#BKMK_LsaLookupNames 
 	#
-	# LogParserWrapper_LSP.ps1 v1.1 2/11 ($g_Top1000 as option to list top 1000 entries with PieChart)
+	# LogParserWrapper_LSP.ps1 v1.2 2/12 ($g_Top1000 as option to list top 1000 entries with PieChart, switch " & ' for path containing space)
 	#		Steps: 
 	#   	1. Install LogParser 2.2 from https://www.microsoft.com/en-us/download/details.aspx?id=24659
 	#     	Note: More about LogParser2.2 https://docs.microsoft.com/en-us/previous-versions/windows/it-pro/windows-xp/bb878032(v=technet.10)?redirectedfrom=MSDN

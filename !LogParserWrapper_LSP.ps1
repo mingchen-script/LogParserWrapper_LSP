@@ -69,7 +69,6 @@ $ErrorActionPreference = "SilentlyContinue"
 		Write-Progress -Activity "Generating $OutTitle CSV using LogParser" -PercentComplete (($Step++/$TotalSteps)*100)
 		$LPQuery = New-Object -ComObject MSUtil.LogQuery
 		$null = $LPQuery.ExecuteBatch($Query,$InputFormat,$OutputFormat)
-		Write-Host 
 		$null = [System.Runtime.Interopservices.Marshal]::ReleaseComObject($LPQuery) 
 		$null = [System.Runtime.Interopservices.Marshal]::ReleaseComObject($InputFormat) 
 		$null = [System.Runtime.Interopservices.Marshal]::ReleaseComObject($OutputFormat) 

@@ -9,7 +9,7 @@
 	#		3. To stop, delete REG in (1) and files in (2)
 	#		4. More info http://technet.microsoft.com/en-us/library/ff428139(v=WS.10).aspx#BKMK_LsaLookupNames 
 	#
-	# LogParserWrapper_LSP.ps1 v1.0 2/11 ($g_Chart as option for script to list ALL SID & fixed TimeRange)
+	# LogParserWrapper_LSP.ps1 v1.1 2/11 ($g_Top1000 as option to list top 1000 entries with PieChart)
 	#		Steps: 
 	#   	1. Install LogParser 2.2 from https://www.microsoft.com/en-us/download/details.aspx?id=24659
 	#     	Note: More about LogParser2.2 https://docs.microsoft.com/en-us/previous-versions/windows/it-pro/windows-xp/bb878032(v=technet.10)?redirectedfrom=MSDN
@@ -18,7 +18,7 @@
 	#   	3. Run script
 	# 
 #------Script variables block, modify to fit your needs ---------------------------------------------------------------------
-$g_Chart = $false  # Include PieChart in report XLS.
+$g_Top1000 = $false # List only top 1000 unique entries with PieChart
 
 #------Main---------------------------------
 $ErrorActionPreference = "SilentlyContinue"
@@ -33,7 +33,22 @@ $ErrorActionPreference = "SilentlyContinue"
 	$OutputFormat = New-Object -ComObject MSUtil.LogQuery.CSVOutputFormat
 	$OutTitle = 'LSP-IP_Sid_Name_App'
 	$OutFile = "$ScriptPath\$TimeStamp-$OutTitle.csv"
-		$Query = @"
+	if ($true -eq $g_Top1000) {	$Query = @"
+			SELECT Top 1000
+				EXTRACT_SUFFIX(SUBSTR(TEXT, INDEX_OF (TEXT, 'Network Address = '), STRLEN(TEXT)), 0, '= ') as Remote_IP,
+				EXTRACT_SUFFIX(SUBSTR(TEXT, INDEX_OF (TEXT, 'Sids[ 0 ] = '), STRLEN(TEXT)), 0, '= ') as LookupSID,
+				EXTRACT_SUFFIX(SUBSTR(TEXT, INDEX_OF (TEXT, 'Names[ 0 ] = '), STRLEN(TEXT)), 0, '= ') as LookupName,
+				EXTRACT_SUFFIX(SUBSTR(TEXT, INDEX_OF (TEXT, 'Process Name = '), STRLEN(TEXT)), 0, '= ') as Process,
+				Count (*) as Total
+			INTO $OutFile
+			FROM $InFiles
+			Where 
+			Index_of(text, 'Network Address')>0 or Index_of(text,'Sids[ 0 ]')>0 or Index_of(text,'Names[ 0 ]')>0 or Index_of(text,'Process Name = ')>0 
+			Group By 
+				Remote_IP, LookupSID, LookupName, Process
+			Order By 
+				Total, Remote_IP, LookupSID, LookupName, Process DESC
+"@} else { $Query = @"
 			SELECT 
 				EXTRACT_SUFFIX(SUBSTR(TEXT, INDEX_OF (TEXT, 'Network Address = '), STRLEN(TEXT)), 0, '= ') as Remote_IP,
 				EXTRACT_SUFFIX(SUBSTR(TEXT, INDEX_OF (TEXT, 'Sids[ 0 ] = '), STRLEN(TEXT)), 0, '= ') as LookupSID,
@@ -48,7 +63,7 @@ $ErrorActionPreference = "SilentlyContinue"
 				Remote_IP, LookupSID, LookupName, Process
 			Order By 
 				Total, Remote_IP, LookupSID, LookupName, Process DESC
-"@
+"@}
 		Write-Progress -Activity "Generating $OutTitle CSV using LogParser" -PercentComplete (($Step++/$TotalSteps)*100)
 		$LPQuery = New-Object -ComObject MSUtil.LogQuery
 		$null = $LPQuery.ExecuteBatch($Query,$InputFormat,$OutputFormat)
@@ -59,15 +74,21 @@ $ErrorActionPreference = "SilentlyContinue"
 	$OldestTimeStamp = $NewestTimeStamp = $LogsInfo = $null
 	(Get-ChildItem -Path $ScriptPath\* -include ('*.log', '*.bak') ).foreach({
 		$FirstLine = ((Get-Content $_ -Head 1 -Encoding Unicode)).substring(0,16)
-			try { $FirstTimeStamp = [datetime]::ParseExact($FirstLine,"[MM/dd HH:mm:ss]",$Null)} catch {}
-			try { $FirstTimeStamp = [datetime]::ParseExact($FirstLine,"[MM/ d HH:mm:ss]",$Null)} catch {}
-			try { $FirstTimeStamp = [datetime]::ParseExact($FirstLine,"[ M/dd HH:mm:ss]",$Null)} catch {}
-			try { $FirstTimeStamp = [datetime]::ParseExact($FirstLine,"[ M/ d HH:mm:ss]",$Null)} catch {}
+			try { $FirstTimeStamp = [datetime]::ParseExact($FirstLine,"[MM/dd HH:mm:ss]",$Null)} catch {
+				try { $FirstTimeStamp = [datetime]::ParseExact($FirstLine,"[MM/ d HH:mm:ss]",$Null)} catch {
+					try { $FirstTimeStamp = [datetime]::ParseExact($FirstLine,"[ M/dd HH:mm:ss]",$Null)} catch {
+						try { $FirstTimeStamp = [datetime]::ParseExact($FirstLine,"[ M/ d HH:mm:ss]",$Null)} catch {}
+					}
+				}
+			}
 		$LastLine  = ((Get-Content $_ -Tail 1 -Encoding Unicode)).substring(0,16)
-			try { $LastTimeStamp = [datetime]::ParseExact($LastLine,"[MM/dd HH:mm:ss]",$Null)} catch {}
-			try { $LastTimeStamp = [datetime]::ParseExact($LastLine,"[MM/ d HH:mm:ss]",$Null)} catch {}
-			try { $LastTimeStamp = [datetime]::ParseExact($LastLine,"[ M/dd HH:mm:ss]",$Null)} catch {}
-			try { $LastTimeStamp = [datetime]::ParseExact($LastLine,"[ M/ d HH:mm:ss]",$Null)} catch {}
+			try { $LastTimeStamp = [datetime]::ParseExact($LastLine,"[MM/dd HH:mm:ss]",$Null)} catch {
+				try { $LastTimeStamp = [datetime]::ParseExact($LastLine,"[MM/ d HH:mm:ss]",$Null)} catch {
+					try { $LastTimeStamp = [datetime]::ParseExact($LastLine,"[ M/dd HH:mm:ss]",$Null)} catch {
+						try { $LastTimeStamp = [datetime]::ParseExact($LastLine,"[ M/ d HH:mm:ss]",$Null)} catch {}
+					}
+				}
+			}
 		If ($OldestTimeStamp -eq $null) { $OldestTimeStamp = $NewestTimeStamp = $FirstTimeStamp }
 		If ($OldestTimeStamp -gt $FirstTimeStamp) {$OldestTimeStamp = $FirstTimeStamp }
 		If ($NewestTimeStamp -lt $LastTimeStamp) {$NewestTimeStamp = $LastTimeStamp }
@@ -95,7 +116,7 @@ If (Test-Path $OutFile) { # Check if LogParser generated CSV.
 			$null = $Sheet.Cells.Item(1,6).addcomment()
 			$null = $Sheet.Cells.Item(1,6).comment.text($LogRangeText)
 			$Sheet.Cells.Item(1,6).comment.shape.textframe.Autosize = $true
-		if ($true -eq $g_Chart) { 
+		if ($true -eq $g_Top1000) { 
 			$Chart = $Sheet.shapes.addChart().chart # https://codewala.net/2016/09/20/how-to-create-excel-chart-using-powershell-part-1/, https://codewala.net/2016/09/23/how-to-create-excel-chart-using-powershell-part-2/, https://codewala.net/2016/09/27/how-to-create-excel-chart-using-powershell-part-3/
 			$Chart.chartType = -4120 
 			$Chart.SizeWithWindow = $Chart.HasTitle=$true  
